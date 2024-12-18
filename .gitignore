@@ -1,0 +1,21 @@
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Vendor directories
+/vendor/
+/temp/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+
+# Dependency directories
+/node_modules/
+/dist/
