@@ -28,3 +28,61 @@ To install the `panicrecovery` package, run the following command in  Go project
 
 ```bash
 go get github.com/srahkmli/panicrecovery
+``` 
+## Overview
+
+### `HTTPRecover`
+
+- **Description:** A simple middleware that recovers from panics, logs the error, and sends a default `500 Internal Server Error` response.
+- **Key Features:**
+  - Logs the panic error and stack trace.
+  - Responds with a fixed error message (`"Internal Server Error"`) and HTTP status code (`500`).
+- **Use Case:** Suitable for applications requiring a straightforward panic recovery mechanism without customization.
+
+#### Example Usage:
+```go
+http.Handle("/example", HTTPRecover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    panic("example panic")
+})))
+```
+
+---
+
+### `HTTPRecoverWithHandler`
+
+- **Description:** A flexible middleware that allows custom handling of errors via a user-provided `HTTPErrorHandler` function.
+- **Key Features:**
+  - Accepts an `HTTPErrorHandler` function for customizable error responses.
+  - Provides a fallback behavior similar to `HTTPRecover` if no handler is specified.
+- **Use Case:** Ideal for applications requiring detailed and tailored error responses or additional error-handling logic, such as sending alerts or metrics.
+
+#### Example Usage:
+```go
+customHandler := func(w http.ResponseWriter, r *http.Request, err interface{}) {
+    log.Printf("Custom handler: panic %v", err)
+    http.Error(w, "Something went wrong", http.StatusInternalServerError)
+}
+
+http.Handle("/example", HTTPRecoverWithHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    panic("example panic")
+}), customHandler))
+```
+
+- Use **`HTTPRecover`** for simple applications that do not require custom error handling.
+
+- Use **`HTTPRecoverWithHandler`** when you need to provide detailed error responses or additional error-handling logic. The additional flexibility ensures the middleware can adapt to complex application requirements.
+---
+
+## Differences
+
+| Aspect                | `HTTPRecover`                                           | `HTTPRecoverWithHandler`                                  |
+|-----------------------|---------------------------------------------------------|----------------------------------------------------------|
+| **Error Handling**     | Fixed behavior: log + `500 Internal Server Error`.      | Customizable via `HTTPErrorHandler`.                     |
+| **Flexibility**        | Minimal flexibility.                                    | Highly flexible due to user-provided handler.            |
+| **Custom Error Output**| Not supported.                                          | Fully supported via the handler.                        |
+| **Default Fallback**   | Logs the error and responds with `500`.                 | Logs the error and responds with `500` if no handler.    |
+
+---
+ 
+
+
