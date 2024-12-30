@@ -24,3 +24,20 @@ func RecoverInterceptor() grpc.UnaryServerInterceptor {
 		return handler(ctx, req)
 	}
 }
+
+// RecoverStreamInterceptor is a gRPC interceptor that recovers from panics in gRPC streaming methods.
+func RecoverStreamInterceptor() grpc.StreamServerInterceptor {
+	return func(
+		srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		defer func() {
+			if err := recover(); err != nil {
+				// Log the panic error with stack trace for stream-based methods.
+				log.Printf("Recovered from panic in gRPC streaming method %s: %v\nStack Trace: %s", info.FullMethod, err, string(debug.Stack()))
+			}
+		}()
+		// Call the handler to execute the streaming RPC method
+		return handler(srv, stream)
+	}
+}

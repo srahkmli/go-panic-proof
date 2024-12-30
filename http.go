@@ -22,3 +22,22 @@ func HTTPRecover(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+type HTTPErrorHandler func(w http.ResponseWriter, r *http.Request, err interface{})
+
+func HTTPRecoverWithHandler(next http.Handler, errorHandler HTTPErrorHandler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				if errorHandler != nil {
+					errorHandler(w, r, err)
+				} else {
+					// Default error response
+					log.Printf("Recovered from panic: %v\nStack Trace: %s", err, string(debug.Stack()))
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				}
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
