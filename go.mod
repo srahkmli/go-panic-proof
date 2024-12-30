@@ -1,4 +1,4 @@
-module panicrecovery
+module github.com/srahkmli/go-panic-proof
 
 go 1.23.4
 
