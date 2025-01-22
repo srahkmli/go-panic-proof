@@ -1,7 +1,6 @@
 package panicrecovery
 
 import (
-	"log"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -40,8 +39,12 @@ func HTTPRecoverWithHandler(next http.Handler, errorHandler HTTPErrorHandler) ht
 				if errorHandler != nil {
 					errorHandler(w, r, err)
 				} else {
+					logger.Error("Recovered from panic",
+						zap.Any("error", err),
+						zap.String("stack_trace", string(debug.Stack())),
+						zap.Time("timestamp", time.Now()))
+
 					// Default error response
-					log.Printf("Recovered from panic: %v\nStack Trace: %s", err, string(debug.Stack()))
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				}
 			}
