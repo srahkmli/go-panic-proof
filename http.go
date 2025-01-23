@@ -1,43 +1,47 @@
 package panicrecovery
 
 import (
-	"log"
 	"net/http"
 	"runtime/debug"
+	"time"
+
+	"go.uber.org/zap"
 )
+
+type HTTPErrorHandler func(w http.ResponseWriter, r *http.Request, err interface{})
 
 // HTTPRecover is an HTTP middleware that recovers from panics and logs the error.
 func HTTPRecover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if err := recover(); err != nil {
-				// Log the panic error with stack trace.
-				log.Printf("Recovered from panic: %v\nStack Trace: %s", err, string(debug.Stack()))
-
-				// Respond with 500 Internal Server Error.
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			}
-		}()
+		defer handleHTTPPanic(w, r, nil)
 		// Call the next handler in the chain
 		next.ServeHTTP(w, r)
 	})
 }
 
-type HTTPErrorHandler func(w http.ResponseWriter, r *http.Request, err interface{})
-
+// HTTPRecoverWithHandler adds customizable error responses
 func HTTPRecoverWithHandler(next http.Handler, errorHandler HTTPErrorHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if err := recover(); err != nil {
-				if errorHandler != nil {
-					errorHandler(w, r, err)
-				} else {
-					// Default error response
-					log.Printf("Recovered from panic: %v\nStack Trace: %s", err, string(debug.Stack()))
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				}
-			}
-		}()
+		defer handleHTTPPanic(w, r, errorHandler)
+		// Call the next handler in the chain
 		next.ServeHTTP(w, r)
 	})
+}
+
+func handleHTTPPanic(w http.ResponseWriter, r *http.Request, errorHandler HTTPErrorHandler) {
+	if err := recover(); err != nil {
+		Logger.Error("Recovered from panic",
+			zap.Any("error", err),
+			zap.String("stack_trace", string(debug.Stack())),
+			zap.Time("timestamp", time.Now()),
+			zap.String("path", r.URL.Path),
+			zap.String("method", r.Method))
+
+		if errorHandler != nil {
+			errorHandler(w, r, err)
+			return
+		}
+		// Default error response
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }

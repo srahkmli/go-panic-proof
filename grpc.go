@@ -2,25 +2,30 @@ package panicrecovery
 
 import (
 	"context"
-	"log"
 	"runtime/debug"
+	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+// Context key
+const PanicDetailsKey = "panicDetails"
 
 // RecoverInterceptor is a gRPC interceptor that recovers from panics in gRPC methods.
 func RecoverInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	) (resp any, err error) {
 		defer func() {
-			if err := recover(); err != nil {
-				// Log the panic error with stack trace.
-				log.Printf("Recovered from panic in gRPC method %s: %v\nStack Trace: %s", info.FullMethod, err, string(debug.Stack()))
+			if r := recover(); r != nil {
+				ctx, err = handlegRPCPanic(ctx, r, info.FullMethod)
 			}
 		}()
-		// Call the handler to execute the RPC method
+		// Call the handler to execute the RPC method and pass ctx to downstream
 		return handler(ctx, req)
 	}
 }
@@ -30,14 +35,26 @@ func RecoverStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(
 		srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
-	) error {
+	) (err error) {
 		defer func() {
-			if err := recover(); err != nil {
-				// Log the panic error with stack trace for stream-based methods.
-				log.Printf("Recovered from panic in gRPC streaming method %s: %v\nStack Trace: %s", info.FullMethod, err, string(debug.Stack()))
+			if r := recover(); r != nil {
+				_, err = handlegRPCPanic(stream.Context(), r, info.FullMethod)
 			}
 		}()
 		// Call the handler to execute the streaming RPC method
 		return handler(srv, stream)
 	}
+}
+
+func handlegRPCPanic(ctx context.Context, r any, method string) (context.Context, error) {
+	Logger.Error("Recovered from panic in gRPC",
+		zap.Any("error", r),
+		zap.String("method", method),
+		zap.String("stack_trace", string(debug.Stack())),
+		zap.Time("timestamp", time.Now()))
+
+	// Atach recovery info to ctx
+	ctx = context.WithValue(ctx, PanicDetailsKey, r)
+
+	return ctx, status.Errorf(codes.Internal, "panic occurred: %v", r)
 }
