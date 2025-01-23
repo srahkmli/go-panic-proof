@@ -2,11 +2,15 @@ package panicrecovery
 
 import (
 	"context"
-	"log"
 	"runtime/debug"
+	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
+
+// Context key
+const PanicDetailsKey = "panicDetails"
 
 // RecoverInterceptor is a gRPC interceptor that recovers from panics in gRPC methods.
 func RecoverInterceptor() grpc.UnaryServerInterceptor {
@@ -15,12 +19,9 @@ func RecoverInterceptor() grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
 		defer func() {
-			if err := recover(); err != nil {
-				// Log the panic error with stack trace.
-				log.Printf("Recovered from panic in gRPC method %s: %v\nStack Trace: %s", info.FullMethod, err, string(debug.Stack()))
-			}
+			ctx = handlegRPCPanic(ctx, info.FullMethod)
 		}()
-		// Call the handler to execute the RPC method
+		// Call the handler to execute the RPC method and pass ctx to downstream
 		return handler(ctx, req)
 	}
 }
@@ -32,12 +33,23 @@ func RecoverStreamInterceptor() grpc.StreamServerInterceptor {
 		handler grpc.StreamHandler,
 	) error {
 		defer func() {
-			if err := recover(); err != nil {
-				// Log the panic error with stack trace for stream-based methods.
-				log.Printf("Recovered from panic in gRPC streaming method %s: %v\nStack Trace: %s", info.FullMethod, err, string(debug.Stack()))
-			}
+			_ = handlegRPCPanic(stream.Context(), info.FullMethod)
 		}()
 		// Call the handler to execute the streaming RPC method
 		return handler(srv, stream)
 	}
+}
+
+func handlegRPCPanic(ctx context.Context, method string) context.Context {
+	if err := recover(); err != nil {
+		Logger.Error("Recovered from panic in gRPC",
+			zap.Any("error", err),
+			zap.String("method", method),
+			zap.String("stack_trace", string(debug.Stack())),
+			zap.Time("timestamp", time.Now()))
+
+		// Atach recovery info to ctx
+		return context.WithValue(ctx, PanicDetailsKey, err)
+	}
+	return ctx
 }
